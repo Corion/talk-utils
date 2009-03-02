@@ -1,0 +1,532 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+#
+# the view that turns pod into S5
+#
+
+package Pod::POM::View::MyHTML;
+use base 'Pod::POM::View::HTML::Filter';
+
+sub view_pod {
+    my ( $self, $pod ) = @_;
+    $pod->content->present($self);
+}
+
+sub view_head1 {
+    my ( $self, $pod ) = @_;
+    qq'<div class="slide">\n<h1>'
+      . $pod->title->present($self)
+      . qq'</h1>\n<div class="slidecontent">\n'
+      . $pod->content->present($self)
+      . qq'</div></div>\n';
+}
+
+# add support for ul classes (incremental style, etc.)
+
+my @OVER;
+
+# because @OVER is a private variable in Pod::POM::View::HTML,
+# I had to copy view_item() verbatim, in addition to the slightly
+# modified view_over() :-(
+
+sub view_over {
+    my ($self, $over) = @_;
+    my ($start, $end, $strip);
+
+    my $items = $over->item();
+    return "" unless @$items;
+
+    my $first_title = $items->[0]->title();
+
+    my $style =
+      $over->indent =~ /^incremental/ ? ' class="' . $over->indent . '"' : '';
+
+    if ($first_title =~ /^\s*\*\s*/) {
+        # '=item *' => <ul>
+        $start = "<ul$style>\n";
+        $end   = "</ul>\n";
+        $strip = qr/^\s*\*\s*/;
+    }
+    elsif ($first_title =~ /^\s*\d+\.?\s*/) {
+        # '=item 1.' or '=item 1 ' => <ol>
+        $start = "<ol$style>\n";
+        $end   = "</ol>\n";
+        $strip = qr/^\s*\d+\.?\s*/;
+    }
+    else {
+        $start = "<ul$style>\n";
+        $end   = "</ul>\n";
+        $strip = '';
+    }
+
+    my $overstack = ref $self ? $self->{ OVER } : \@OVER;
+    push(@$overstack, $strip);
+    my $content = $over->content->present($self);
+    pop(@$overstack);
+
+    return $start
+         . $content
+         . $end;
+}
+
+# this block is straight from Pod::POM::View::HTML :-(
+sub view_item {
+    my ($self, $item) = @_;
+
+    my $over  = ref $self ? $self->{ OVER } : \@OVER;
+    my $title = $item->title();
+    my $strip = $over->[-1];
+
+    if (defined $title) {
+        $title = $title->present($self) if ref $title;
+        $title =~ s/$strip// if $strip;
+        if (length $title) {
+            my $anchor = $title;
+            $anchor =~ s/^\s*|\s*$//g; # strip leading and closing spaces
+            $anchor =~ s/\W/_/g;
+            $title = qq{<a name="item_$anchor"></a><b>$title</b>};
+        }
+    }
+
+    return '<li>'
+        . "$title\n"
+        . $item->content->present($self)
+        . "</li>\n";
+}
+
+sub view_verbatim {
+    my ($self,$text) = @_;
+    my $line = 1;
+    $text =~ s!^!sprintf "%2g:", $line++!egm;
+    $self->SUPER::view_verbatim($text)
+}
+
+#
+# the actual spod5 script
+#
+
+package main;
+use Pod::POM 'meta';
+use Pod::POM::View::HTML::Filter;
+use Getopt::Long;
+use Template;
+use File::Spec;
+use File::Basename;
+use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
+use SVG::Layers;
+
+our $VERSION = '0.02';
+
+# usage message
+my $usage = << "USAGE";
+Available options:
+  --quiet          : be silent
+  --force          : clobber existing html files
+  --exec           : enables =exec lines
+  --base   <dir>   : directory containing the S5 .css and .js files
+  --slides <file>  : alternate slides.css (relative to --base)
+  --debug          : print the intermediate pod to STDOUT
+USAGE
+
+# basic command-line params
+my %conf = (
+    quiet  => 0,
+    force  => 0,
+    debug  => 0,
+    base   => File::Spec->catfile( 'ui', 'default' ),
+    slides => 'slides.css',
+    exec   => 0,
+);
+GetOptions( \%conf, "quiet!", "force!", "debug!", "base=s", "exec!",
+    "slides=s", "help!", "version!" )
+  or die $usage;
+
+# information
+print STDERR "spod5-svg version $VERSION\n" if $conf{version};
+print STDERR $usage if $conf{help};
+exit if $conf{help} || $conf{version};
+
+# all the useful stuff here
+my $parser   = Pod::POM->new();
+my $tt       = Template->new();
+my $template = join '', <DATA>;
+$|++;
+
+# helper sub
+sub include {
+    my ($src, $inc) = @_;
+
+    $inc = File::Spec->catfile( dirname($src), $inc )
+      if !File::Spec->file_name_is_absolute($inc);
+
+    open my $fh, "<", $inc
+      or do { my $err = "$inc: $!"; warn $err; return $err };
+    my $t = join "\n", <$fh>;
+    close $fh;
+    $t;
+}
+
+# These should be converted to symbolic names
+# instead of being coderefs that can't be configured
+use vars '@shortcuts';
+
+@shortcuts = (
+    sub { s/^(=+) +/=head@{[length $1]} /gm },
+    sub { s/^\* +/\n=item *\n\n/gm },
+    sub { s/^# +/\n=item 1\n\n/gm },
+    sub { s/^\+\s*$/\n=over 4\n/gm },
+    sub { s/^\+>\s*$/\n=over incremental show-first\n/gm },
+    sub { s/^\+>>\s*$/\n=over incremental\n/gm },
+    sub { s/^\-\s*$/\n=back\n\n/gm },
+    sub { s/\A\s*//;    # Pod::POM does not likes newlines at the beginning
+    },
+    sub { s!^{{(.*?)^}}!=for html <div class="handout">\n\n$1\n=for html </div>\n\n!gms },
+    sub { s{^=svg\s+(\S+)}{svg_to_pod($1)}egm },
+    sub { s!^=img\s+(\S+)!=for html <img src="$1" />\n\n!gm },
+    sub { s{^=include\s+(\S+)}{include($_[0], $1)}egm },
+    sub { s{^=exec\s+(.+)}{`$1`}egm if $conf{exec} },
+);
+
+sub svg_to_pod {
+    my ($svgfile) = @_;
+    
+    my $svg = SVG::File->load($svgfile);
+    #my ($width,$height) = map { int $_ + 5 } $svg->dimensions;
+    (my $pngfile = $svgfile) =~ s/\.svg/\.png/i;
+    
+    return "=img $pngfile\n"
+}
+
+sub convert_shortcuts {
+    local $_ = $_[0];
+    my $filename = $_[1];
+    for my $convert (@shortcuts) {
+        $convert->($filename);
+    };
+    return $_;
+}
+
+my @files = @ARGV;
+for my $file (@files) {
+    @ARGV = ($file);
+    (my $new = $file) =~ s/(?:\.pod)?$/.html/;
+
+    print STDERR "$file... " unless $conf{quiet};
+    next
+      if !$conf{force}
+      && -e $new
+      && ( stat $new )[9] > ( stat $file )[9]
+      && !$conf{quiet}
+      && print STDERR "skipped (use --force)\n";
+
+    my $text = join '', <>;
+    next unless $text;
+
+    # convert text shortcuts back to pod
+    # ain't that plain ugly?
+    $text = convert_shortcuts($text, $file);
+
+    # debug the intermediate pod
+    print STDOUT "\n$text" if $conf{debug};
+
+    # parse the pod
+    my $pom = $parser->parse_text($text);
+    $pom->metadata( base => $conf{base} );
+    $pom->metadata( slides => $pom->metadata('slides') || $conf{slides} );
+
+    # produce the HTML
+    $tt->process(
+        \$template,
+        {
+            pom  => $pom,
+            view => Pod::POM::View::MyHTML->new(),
+            meta => $pom->metadata,
+        },
+        $new
+      )
+      || warn $tt->error;
+
+    print STDERR "done\n" unless $conf{quiet};
+}
+
+=pod
+
+=head1 NAME
+
+spod5 - Turn pod into S5
+
+=head1 SYNOPSIS
+
+B<spod5> [--I<quiet>] [--I<force>] [--I<exec>] [I<--base> F<dir>]
+    [--I<slides> F<style.css>] [--I<help>] [--I<version>] file.pod [ ... ]
+
+=head1 DESCRIPTION
+
+B<spod5> is a I<pod-to-S5> tool, that uses C<Pod::POM::View::HTML::Filter>
+to add syntax coloring to your slides.
+
+=head2 Command-line options
+
+B<spod5> supports the following options:
+
+=over 4
+
+=item --I<quiet>
+
+Do not print information messages.
+
+=item I<--force>
+
+Clobber existing F<.html> files.
+
+=item --I<base> F<dir>
+
+Directory where the S5 CSS and JavaScript files are to be found.
+Default is F<ui/default>.
+
+=item --I<slides> F<file>
+
+Provide a replacement for the standard F<slides.css> file found in
+F<ui/default>. This allows one to define their own styles. See also
+the C<=meta slides> directive in the source file.
+
+=item --I<exec>
+
+Execute the commands in C<=exec> directives.
+
+=item --I<help>
+
+Provide the list of available options and exit.
+
+=item --I<version>
+
+Print version information and exit.
+
+=back
+
+=head1 WRITING A SPOD5 DOCUMENT
+
+Writing a presentation with B<spod5> is rather easy: all the C<=head1>
+headers mark the beginning of a new slide. The rest of the pod mark-up
+is converted as usual.
+
+B<spod5> add several shortcuts and features:
+
+=over 4
+
+=item *
+
+C<=begin filter> / C<=end filter> sections allow support for syntax
+highlighting as done by C<Pod::POM::View::HTML::Filter>.
+
+Several shortcuts are recognised:
+
+=item * 
+
+convert into a bulleted list (can be nested):
+
+    +
+    * bam
+    * powie
+    * kapow
+    -
+
+=item *
+
+support the C<incremental> and C<incremental show-first> classes, by
+using an explicit C<=over I<style>>:
+
+    =over incremental
+    
+    * zlonk
+    * ouch
+
+    =back
+
+C<<< +>> >>> is an alias for C<=over incremental> and
+C<< +> >> for C<=over incremental show-first>.
+
+=item *
+
+put the inner text in the handout only:
+
+    {{
+    ...
+    }}
+
+=item *
+
+insert an image:
+
+    =img image.png
+
+=item *
+
+include another file:
+
+    =include file.txt
+
+Note that the file is not parsed for special extensions like C<+>, C<->,
+etc. If you want to include slide content, use plain pod.
+
+=item *
+
+insert the output of a command (dangerous):
+
+    =exec command
+
+This is disabled by default: you must pass the I<--exec> command-line
+parameter to enable execution of code.
+
+=item *
+
+for inserting more complex HTML, you can still use the classic
+C<=for html> or C<=begin html> / C<=end html> constructs.
+
+=back
+
+=head2 Meta
+
+You can add several meta information to your pod:
+
+    title        (presentation title)
+    presdate     (presentation date)
+    author
+    company
+    slides       (alternate slides.css file, to easily change styles)
+    view         (slideshow or outline)
+    controls     (hidden or visible)
+
+=head2 S5 Version
+
+This version of B<spod5> is meant to be used with S5 1.1, which can be
+downloaded here: L<http://www.meyerweb.com/eric/tools/s5/v/1.1/s5-11.zip>
+
+The main template is based on the F<blank.html> file provided with S5 1.1.
+
+For all things S5, see L<http://www.meyerweb.com/eric/tools/s5/>.
+
+=head1 BUGS
+
+Well, this script is just a quick hack for YAPC::Europe 2005.
+However, if you find bugs or have feature requests, send them
+to C<bug-spod5@rt.cpan.org>, or through the web interface at
+L<http://rt.cpan.org>. I will be notified, and then you'll automatically
+be notified of progress on your bug as I make changes.
+
+=head1 COPYRIGHT
+
+Copyright 2005, Philippe Bruhat.
+
+=head1 LICENSE
+
+This scritp is free software; you can redistribute it or modify it under
+the same terms as Perl itself.
+
+=cut
+
+__DATA__
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" 
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>[% meta.title %]</title>
+<!-- metadata -->
+<meta name="generator" content="spod5" />
+<meta name="version" content="S5 1.1" />
+<meta name="presdate" content="[% meta.presdate %]" />
+<meta name="author" content="[% meta.author %]" />
+<meta name="company" content="[% meta.company %]" />
+<!-- configuration parameters -->
+<meta name="defaultView" content="[% meta.view || "slideshow" %]" />
+<meta name="controlVis" content="[% meta.controls || "hidden" %]" />
+<!-- style sheet links -->
+<link rel="stylesheet" href="[% meta.base %]/[% meta.slides %]" type="text/css" media="projection" id="slideProj" />
+<link rel="stylesheet" href="[% meta.base %]/outline.css" type="text/css" media="screen" id="outlineStyle" />
+<link rel="stylesheet" href="[% meta.base %]/print.css" type="text/css" media="print" id="slidePrint" />
+<link rel="stylesheet" href="[% meta.base %]/opera.css" type="text/css" media="projection" id="operaFix" />
+<!-- S5 JS -->
+<script src="[% meta.base %]/slides.js" type="text/javascript"></script>
+
+<style type="text/css">
+<!--
+/* 
+ * perltidy's styles
+ */
+.c  { color: #228B22;                    } /* comment */
+.cm { color: #000000;                    } /* comma */
+.co { color: #000000;                    } /* colon */
+.h  { color: #CD5555; font-weight:bold;  } /* here-doc-target */
+.hh { color: #CD5555; font-style:italic; } /* here-doc-text */
+.i  { color: #00688B;                    } /* identifier */
+.j  { color: #000000; font-weight:bold;  } /* label */
+.k  { color: #8B4513; font-weight:bold;  } /* keyword */
+.m  { color: #FF0000; font-weight:bold;  } /* subroutine */
+.n  { color: #B452CD;                    } /* numeric */
+.p  { color: #000000;                    } /* paren */
+.pd { color: #228B22; font-style:italic; } /* pod-text */
+.pu { color: #000000;                    } /* punctuation */
+.q  { color: #CD5555;                    } /* quote */
+.s  { color: #000000;                    } /* structure */
+.sc { color: #000000;                    } /* semicolon */
+.v  { color: #B452CD;                    } /* v-string */
+.w  { color: #000000;                    } /* bareword */
+
+/* ====================================================================== *
+ * Sample stylesheet for Syntax::Highlight::HTML                          *
+ *                                                                        *
+ * Copyright (C)2004 Sebastien Aperghis-Tramoni, All Rights Reserved.     *
+ *                                                                        *
+ * This file is free software; you can redistribute it and/or modify      *
+ * it under the same terms as Perl itself.                                *
+ * ====================================================================== */
+
+.h-decl { color: #336699; font-style: italic; }   /* doctype declaration  */
+.h-pi   { color: #336699;                     }   /* process instruction  */
+.h-com  { color: #338833; font-style: italic; }   /* comment              */
+.h-ab   { color: #000000; font-weight: bold;  }   /* angles as tag delim. */
+.h-tag  { color: #993399; font-weight: bold;  }   /* tag name             */
+.h-attr { color: #000000; font-weight: bold;  }   /* attribute name       */
+.h-attv { color: #333399;                     }   /* attribute value      */
+.h-ent  { color: #cc3333;                     }   /* entity               */
+
+.h-lno  { color: #cccccc; background: #eee;   }   /* line numbers         */
+-->
+</style>
+
+
+</head>
+<body>
+
+<div class="layout">
+<div id="controls"><!-- DO NOT EDIT --></div>
+<div id="currentSlide"><!-- DO NOT EDIT --></div>
+<div id="header"></div>
+<div id="footer">
+<h1>[% meta.presdate %]</h1>
+<h2>[% meta.title %]</h2>
+</div>
+
+</div>
+
+
+<div class="presentation">
+
+<div class="slide">
+[% meta.title_top %]
+<h1>[% meta.title %]</h1>
+<h3>[% meta.author %]</h3>
+<h4>[% meta.company %]</h4>
+[% meta.title_bottom %]
+</div>
+
+[% pom.present(view) %]
+
+</div>
+
+</body>
+</html>
