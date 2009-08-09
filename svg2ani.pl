@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
+use lib './lib';
 use SVG::Layers;
 use File::DosGlob qw(bsd_glob);
 use File::Spec;
