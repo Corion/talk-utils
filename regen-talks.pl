@@ -1,11 +1,14 @@
 #!perl -w
 use strict;
+use POSIX qw(strftime);
 use Template;
 use File::Basename;
 use File::Spec;
+use Cwd 'getcwd';
 use Data::Dumper;
 use Getopt::Long;
 use File::Glob qw(bsd_glob);
+use XML::Atom::SimpleFeed;
 
 GetOptions(
     'target|t:s' => \my $target_dir,
@@ -101,36 +104,89 @@ for (@talks) {
         warn "Talk $info->{title} has no section";
     };
 };
-my $template = Template->new();
-my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} } sort keys %sections;
-$template->process(\*DATA,{ sections => \@sections }, \my $index);
 
+my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} } sort keys %sections;
+
+sub html {
+    my ($params) = @_;
+    my $template = Template->new();
+    $template->process(\*DATA,$params, \my $index);
+    return $index;
+};
+
+sub atom {
+    my ($params) = @_;
+    my $base_url = $params->{base};
+    my $feed = XML::Atom::SimpleFeed->new(
+        title   => 'Vortraege von Max Maischein',
+        link    => $base_url,
+        link    => { rel => 'self', href=>"$base_url/index.atom", },
+        updated => strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime ),
+        author  => 'Max Maischein',
+        id      => "$base_url/index.atom",
+    );
+    # flatten the sections into one long list
+    for my $talk (map { @{ $_->{items} } } @{ $params->{sections} }) {
+        $talk->{date} ||= strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
+        $feed->add_entry(
+            title => $talk->{title},
+            (link  => join '/', $base_url, $talk->{talkdir},$talk->{htmlname},),
+            (id    => join '/', $base_url, $talk->{talkdir},$talk->{htmlname},),
+            summary => $talk->{title},
+            updated => $talk->{date}, # should fix this to be a HTTP date
+            (map {; category => $_ } @{ $talk->{tags} }),
+        );
+    };
+    return $feed->as_string
+};
+
+my $index = html({ sections => \@sections });
 if ($local_only) {
     print $index;
     exit;
 };
+my $atom = atom({ sections => \@sections, base => 'http://corion.net/talks', });
 
-for my $talk (map {@$_} values %sections) {
-    chdir "../" . $talk->{talkdir}
-        or die "Couldn't chdir to $talk->{talkdir}: $!";
-    my @files = map  { -d($_) ? bsd_glob "$_/*" : $_ }
-                grep { -e($_) } (
-        'images',
-	'ui',
-	'ui/default',
-	'ui/i18n',
-	$talk->{htmlname},
-	$talk->{podname},
-    );
-    
-    system('ssh', "corion.net", "mkdir","$target_dir/$talk->{talkdir}");
-    system('rsync', '-arR', @files, "corion.net:$target_dir/$talk->{talkdir}");
+sub upload_files {
+    my ($host,$target_dir) = @_;
+    for my $talk (map {@$_} values %sections) {
+        my $old_dir = getcwd;
+        chdir "../" . $talk->{talkdir}
+            or die "Couldn't chdir to $talk->{talkdir}: $!";
+        my @files = map  { -d($_) ? bsd_glob "$_/*" : $_ }
+                    grep { -e($_) } (
+            'images',
+	    'ui',
+	    'ui/default',
+	    'ui/i18n',
+	    $talk->{htmlname},
+	    $talk->{htmlname_en},
+	    $talk->{podname},
+        );
+        
+        system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
+        system('rsync', '-arR', @files, "$host:$target_dir/$talk->{talkdir}");
+        chdir( $old_dir )
+            or die "Couldn't restore '$old_dir': $!";
+    };
+    system('ssh', $host, "chmod","-R", "ugo+rx", "$target_dir/");
 };
-system('ssh', "corion.net", "chmod","-R", "ugo+rx", "$target_dir/");
 
-open my $target, "| ssh corion.net 'cat >${target_dir}/index.html'"
-    or die "Connection to corion.net failed: $!";
-print {$target} $index;
+upload_files('corion.net',$target_dir);
+
+sub r_open {
+    my ($host,$remote_name) = @_;
+    open my $target, "| ssh $host 'cat >$remote_name'"
+        or die "Connection to '$host' failed: $!";
+    $target
+};
+
+my $html_target = r_open( 'corion.net' => "${target_dir}/index.html" );
+print {$html_target} $index;
+
+my $atom_target = r_open( 'corion.net' => "${target_dir}/index.atom" );
+print {$atom_target} $atom;
+
 
 __DATA__
 <html>
