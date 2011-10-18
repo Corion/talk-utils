@@ -150,7 +150,7 @@ exit if $conf{help} || $conf{version};
 
 # all the useful stuff here
 my $parser   = Pod::POM->new();
-my $tt       = Template->new();
+my $tt       = Template->new({ ENCODING => 'utf8' });
 my $template = join '', <DATA>;
 $|++;
 
@@ -221,7 +221,10 @@ for my $file (@files) {
       && !$conf{quiet}
       && print STDERR "skipped (use --force)\n";
 
-    my $text = join '', <>;
+    open my $fh, '<', $file
+        or die "Couldn't read '$file': $!";
+    binmode $fh, ':utf8';
+    my $text = join '', <$fh>;
     next unless $text;
 
     # convert text shortcuts back to pod
@@ -436,6 +439,7 @@ __DATA__
 <head>
 <title>[% meta.title %]</title>
 <!-- metadata -->
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="generator" content="spod5" />
 <meta name="version" content="S5 1.1" />
 <meta name="presdate" content="[% meta.presdate %]" />
