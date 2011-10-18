@@ -494,6 +494,7 @@ __DATA__
 <h1>[% meta.title %]</h1>
 <h3>[% meta.author %]</h3>
 <h4>[% meta.company %]</h4>
+[% IF meta.title_image %]<img src="[% meta.title_image %]">[% END %]
 [% meta.title_bottom %]
 </div>
 
