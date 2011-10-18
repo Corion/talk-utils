@@ -117,7 +117,7 @@ use File::Basename;
 use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
 use SVG::Layers;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 # usage message
 my $usage = << "USAGE";
