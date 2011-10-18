@@ -115,7 +115,7 @@ use Template;
 use File::Spec;
 use File::Basename;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # usage message
 my $usage = << "USAGE";
