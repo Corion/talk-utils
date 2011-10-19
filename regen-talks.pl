@@ -1,4 +1,4 @@
-#!perl -w
+#!/opt/perl/bin/perl5.8.7 -w
 use strict;
 use POSIX qw(strftime);
 use Template;
@@ -15,6 +15,7 @@ GetOptions(
     'force|f'    => \my $force,
     'local|l'    => \my $local_only,
     'format'     => \my @format,
+    'verbose|v'  => \my $verbose,
 );
 
 if (! @format) {
@@ -32,14 +33,22 @@ my %tags = (
     dpw2006 => '8. Deutscher Perl Workshop (2006)',
     dpw2007 => '9. Deutscher Perl Workshop (2007)',
     dpw2008 => '10. Deutscher Perl Workshop (2008)',
-    dpw2009 => '11. Deutscher Perl Workshop (2009)',
+    dpw2009 => '11. Deutscher Perl Workshop, Frankfurt am Main (2009)',
+    gpw2009 => '11. Deutscher Perl Workshop, Frankfurt am Main (2009)',
     yapce2009 => 'YAPC::Europe 2009 (Lisbon)',
+    dpw2010 => '12. Deutscher Perl Workshop, Schorndorf (2010)',
+    gpw2010 => '12. Deutscher Perl Workshop, Schorndorf (2010)',
+    yapce2010 => 'YAPC::Europe 2010 (Pisa)',
+    froscon2010 => 'FrOSCon 2010 (St. Augustin)',
+    yapce2011 => 'YAPC::Europe 2011 (Riga)',
+    gpw2011 => '13. Deutscher Perl Workshop, Frankfurt (2011)',
+    dpw2011 => '13. Deutscher Perl Workshop, Frankfurt (2011)',
 );
 my @talks = grep { -f
                 && (   m!/[^-]+.(pod|slides)$!
 		    || m!-talk\.(pod|slides)$!
 		    || m!/(.*)/\1.(pod|slides)$!
-		    || (m!/(.*)/(.*).(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
+		    || (m!/(.*)/(.*?)(?:.en)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
 
 # All talks are assumed to be in spod5 format
 
@@ -94,18 +103,20 @@ for (@talks) {
              : slides_metadata( $_ )
 	     ;
     next unless $info->{title};
-    my $section = $info->{tags}
-                ? $info->{tags}->[0]
-		: '';
-    if ($section) {
-        $sections{ $section } ||= [];
-        push @{$sections{ $section }}, $info;
+    print Dumper $info;
+    my $s = $info->{tags};
+    if ($s) {
+        for my $section (@$s) {
+            $sections{ $section } ||= [];
+            push @{$sections{ $section }}, $info;
+        };
     } else {
         warn "Talk $info->{title} has no section";
     };
 };
 
 my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} } sort keys %sections;
+warn Dumper \@sections;
 
 sub html {
     my ($params) = @_;
@@ -154,7 +165,7 @@ sub upload_files {
         chdir "../" . $talk->{talkdir}
             or die "Couldn't chdir to $talk->{talkdir}: $!";
         my @files = map  { -d($_) ? bsd_glob "$_/*" : $_ }
-                    grep { -e($_) } (
+                    grep { defined and -e($_) } (
             'images',
 	    'ui',
 	    'ui/default',
@@ -172,7 +183,7 @@ sub upload_files {
     system('ssh', $host, "chmod","-R", "ugo+rx", "$target_dir/");
 };
 
-upload_files('corion.net',$target_dir);
+upload_files('datenzoo.de',$target_dir);
 
 sub r_open {
     my ($host,$remote_name) = @_;
@@ -181,10 +192,11 @@ sub r_open {
     $target
 };
 
-my $html_target = r_open( 'corion.net' => "${target_dir}/index.html" );
+#my $html_target = r_open( 'corion.net' => "${target_dir}/index.html" );
+my $html_target = r_open( 'datenzoo.de' => "${target_dir}/index.html" );
 print {$html_target} $index;
 
-my $atom_target = r_open( 'corion.net' => "${target_dir}/index.atom" );
+my $atom_target = r_open( 'datenzoo.de' => "${target_dir}/index.atom" );
 print {$atom_target} $atom;
 
 
@@ -193,6 +205,7 @@ __DATA__
 <head>
 <title>Vortraege von Max Maischein</title>
 <link rel="stylesheet" href="../style.css"></link>
+<link rel="alternate" type="application/atom+xml" href="index.atom">
 </head>
 <body>
 <h1>Vortraege von Max Maischein</h1>

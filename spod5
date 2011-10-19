@@ -115,7 +115,7 @@ use Template;
 use File::Spec;
 use File::Basename;
 
-our $VERSION = '0.02';
+our $VERSION = '0.01';
 
 # usage message
 my $usage = << "USAGE";
@@ -148,7 +148,7 @@ exit if $conf{help} || $conf{version};
 
 # all the useful stuff here
 my $parser   = Pod::POM->new();
-my $tt       = Template->new({ ENCODING => 'utf8' });
+my $tt       = Template->new();
 my $template = join '', <DATA>;
 $|++;
 
@@ -179,10 +179,7 @@ for my $file (@files) {
       && !$conf{quiet}
       && print STDERR "skipped (use --force)\n";
 
-    open my $fh, '<', $file
-        or die "Couldn't read '$file': $!";
-    binmode $fh, ':utf8';
-    my $text = join '', <$fh>;
+    my $text = join '', <>;
     next unless $text;
 
     # convert text shortcuts back to pod
@@ -408,7 +405,6 @@ __DATA__
 <head>
 <title>[% meta.title %]</title>
 <!-- metadata -->
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="generator" content="spod5" />
 <meta name="version" content="S5 1.1" />
 <meta name="presdate" content="[% meta.presdate %]" />
@@ -494,7 +490,6 @@ __DATA__
 <h1>[% meta.title %]</h1>
 <h3>[% meta.author %]</h3>
 <h4>[% meta.company %]</h4>
-[% IF meta.title_image %]<img src="[% meta.title_image %]">[% END %]
 [% meta.title_bottom %]
 </div>
 
