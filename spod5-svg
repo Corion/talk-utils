@@ -436,6 +436,7 @@ __DATA__
 <head>
 <title>[% meta.title %]</title>
 <!-- metadata -->
+<meta http-equiv="Content-Type" content="text/html; charset=[% meta.encoding %]">
 <meta name="generator" content="spod5" />
 <meta name="version" content="S5 1.1" />
 <meta name="presdate" content="[% meta.presdate %]" />
