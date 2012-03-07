@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use Encode qw(decode);
 
 #
 # the view that turns pod into S5
@@ -108,6 +109,7 @@ sub view_verbatim {
 #
 
 package main;
+use Encode qw(decode);
 use Pod::POM 'meta';
 use Pod::POM::View::HTML::Filter;
 use Getopt::Long;
@@ -160,8 +162,8 @@ sub include {
 
     $inc = File::Spec->catfile( dirname($src), $inc )
       if !File::Spec->file_name_is_absolute($inc);
-
-    open my $fh, "<", $inc
+    # XXX use =meta encoding
+    open my $fh, "<:encoding(UTF-8)", $inc
       or do { my $err = "$inc: $!"; warn $err; return $err };
     my $t = join "\n", <$fh>;
     close $fh;
@@ -220,8 +222,9 @@ for my $file (@files) {
       && ( stat $new )[9] > ( stat $file )[9]
       && !$conf{quiet}
       && print STDERR "skipped (use --force)\n";
-
-    my $text = join '', <>;
+    open my $fh, '<:encoding(UTF-8)', $file
+        or die "$file: $@";
+    my $text = join '', <$fh>;
     next unless $text;
 
     # convert text shortcuts back to pod
@@ -436,10 +439,10 @@ __DATA__
 <head>
 <title>[% meta.title %]</title>
 <!-- metadata -->
-<meta http-equiv="Content-Type" content="text/html; charset=[% meta.encoding %]">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="generator" content="spod5" />
 <meta name="version" content="S5 1.1" />
-<meta name="presdate" content="[% meta.presdate %]" />
+<meta name="presdate" content="[% meta.presdate | html_entity %]" />
 <meta name="author" content="[% meta.author %]" />
 <meta name="company" content="[% meta.company %]" />
 <!-- configuration parameters -->
