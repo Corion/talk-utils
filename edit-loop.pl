@@ -3,6 +3,7 @@ use Win32::FileNotify;
 #use HTML::Display;
 #use HTML::Display::MozRepl;
 use WWW::Mechanize::Firefox;
+use File::Glob qw(bsd_glob);
 
 use Getopt::Long;
 GetOptions(
@@ -15,6 +16,9 @@ sub status($) {
 };
 
 my ($file,@cmd) = @ARGV;
+if( ! -f $file ) {
+    ($file)= bsd_glob( $file );
+};
 my $watch = Win32::FileNotify->new($file);
 my $mech = WWW::Mechanize::Firefox->new();
 
