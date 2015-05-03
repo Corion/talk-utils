@@ -99,9 +99,33 @@ sub view_item {
 
 sub view_verbatim {
     my ($self,$text) = @_;
+
     my $line = 1;
     $text =~ s!^!sprintf "%2g:", $line++!egm;
-    $self->SUPER::view_verbatim($text)
+    my $res= $self->SUPER::view_verbatim($text);
+
+    if( $res  =~ /^((?:<pre>)?[ \d]?\d:)  [+!] /m ) {
+        my %class=(' ' => 'lowlight',
+                   '!' => 'highlight',
+                   '+' => '',
+                  );
+
+        # Unwrap the PRE tags
+        $res =~ s/^<pre>//;
+        $res =~ s!</pre>$!!;
+        # highlight/lowlight
+        #warn "[[$res]]";
+        # Mark single lines
+                       #  1:  !
+        $res =~ s[^([\d ]\d:)  ([ !+])(.*)][qq($1<span class="$class{$2}"> $3</span $class{$2}>)]egm;
+        # Merge adjoining commonly tagged lines
+        $res =~ s[</span (\w*)>\s+<span class="\1">][\n]gms;
+        # Clean up our HTML again
+        $res =~ s[</span (\w*)>][</span>]g;
+        # Wrap in PRE again
+        $res = "<pre>$res</pre>";
+    };
+    $res
 }
 
 #
