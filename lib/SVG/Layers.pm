@@ -10,7 +10,7 @@ sub get_layers {
 
     for my $slide ($s->animation_from_layers) {
         (my $outname = $file) =~ s/\.svg$//gi;
-        $outname .= sprintf "-%s.svg", $counter++;
+        $outname .= sprintf "-%02d.svg", $counter++;
         $slide->save($outname);
         push @result, $outname;
     }
