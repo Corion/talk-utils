@@ -1,7 +1,6 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Encode qw(decode);
 
 #
 # the view that turns pod into S5
@@ -133,7 +132,6 @@ sub view_verbatim {
 #
 
 package main;
-use Encode qw(decode);
 use Pod::POM 'meta';
 use Pod::POM::View::HTML::Filter;
 use Getopt::Long;
@@ -141,6 +139,8 @@ use Template;
 use File::Spec;
 use File::Basename;
 use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
+use FindBin;
+use lib "$FindBin::Bin/lib";
 use SVG::Layers;
 
 our $VERSION = '0.02';
@@ -186,8 +186,8 @@ sub include {
 
     $inc = File::Spec->catfile( dirname($src), $inc )
       if !File::Spec->file_name_is_absolute($inc);
-    # XXX use =meta encoding
-    open my $fh, "<:encoding(UTF-8)", $inc
+
+    open my $fh, "<", $inc
       or do { my $err = "$inc: $!"; warn $err; return $err };
     my $t = join "\n", <$fh>;
     close $fh;
@@ -246,9 +246,8 @@ for my $file (@files) {
       && ( stat $new )[9] > ( stat $file )[9]
       && !$conf{quiet}
       && print STDERR "skipped (use --force)\n";
-    open my $fh, '<:encoding(UTF-8)', $file
-        or die "$file: $@";
-    my $text = join '', <$fh>;
+
+    my $text = join '', <>;
     next unless $text;
 
     # convert text shortcuts back to pod
@@ -461,12 +460,12 @@ __DATA__
 <html xmlns="http://www.w3.org/1999/xhtml">
 
 <head>
+<meta name="charset" content="UTF-8" />
 <title>[% meta.title %]</title>
 <!-- metadata -->
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="generator" content="spod5" />
 <meta name="version" content="S5 1.1" />
-<meta name="presdate" content="[% meta.presdate | html_entity %]" />
+<meta name="presdate" content="[% meta.presdate %]" />
 <meta name="author" content="[% meta.author %]" />
 <meta name="company" content="[% meta.company %]" />
 <!-- configuration parameters -->

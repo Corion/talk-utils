@@ -1,4 +1,4 @@
-#!/opt/perl/bin/perl5.8.7 -w
+#!/opt/perl-5.18/bin/perl -w
 use strict;
 use POSIX qw(strftime);
 use Template;
@@ -26,7 +26,7 @@ if (! @format) {
 $target_dir ||= 'corion.net/talks';
 
 
-my %tags = (
+my @tags = (
     '' => undef,
     dpw2003 => '5. Deutscher Perl Workshop (2003)',
     dpw2005 => '7. Deutscher Perl Workshop (2005)',
@@ -43,13 +43,32 @@ my %tags = (
     yapce2011 => 'YAPC::Europe 2011 (Riga)',
     gpw2011 => '13. Deutscher Perl Workshop, Frankfurt (2011)',
     dpw2011 => '13. Deutscher Perl Workshop, Frankfurt (2011)',
+    gpw2012 => '14. Deutscher Perl Workshop, Erlangen (2012)',
+    dpw2012 => '14. Deutscher Perl Workshop, Erlangen (2012)',
+    yapce2012 => 'YAPC::Europe 2012 (Frankfurt)',
+    fosdem2013 => 'FOSDEM 2013 (Brussels)',
+    gpw2013 => '15. Deutscher Perl Workshop, Berlin (2013)',
+    dpw2013 => '15. Deutscher Perl Workshop, Berlin (2013)',
+    yapce2013 => 'YAPC::Europe 2013 (Kiew / Kyiv)',
 );
+my %tags = map {$tags[$_*2] => $tags[$_*2+1]} 0..(@tags / 2);
+my @section_order = map {$tags[ $_*2 ]} 0..(@tags/2);
+
+chdir( dirname $0 )
+    or die sprintf "Couldn't chdir to '%s': $!", dirname($0);
 my @talks = grep { -f
                 && (   m!/[^-]+.(pod|slides)$!
 		    || m!-talk\.(pod|slides)$!
 		    || m!/(.*)/\1.(pod|slides)$!
-		    || (m!/(.*)/(.*?)(?:.en)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
+		    || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
 
+# Reject todo.pod
+@talks = grep { lc($_) !~ /\btodo.pod$/ } @talks;
+
+if( $verbose ) {
+    warn $_
+        for @talks;
+};
 # All talks are assumed to be in spod5 format
 
 sub pod_metadata {
@@ -66,12 +85,29 @@ sub pod_metadata {
         talkdir => $talkdir,
 	map { s/\s+$//; /^=meta (\w+)\s+(.*)$/ ? ($1 => $2) : () } <$fh>
     );
-    (my $en_name = $htmlname) =~ s/\.html$/.en.html/i;
+    (my $en_name = $htmlname) =~ s/(?:.de)?\.html$/.en.html/i;
     if (-e "../$talkdir/$en_name") {
         $meta{htmlname_en} = $en_name;
     };
     if ($meta{tags}) {
         $meta{tags} = [ split /,/, $meta{tags} ];
+    };
+    if( $meta{video} ) {
+        my @videos;
+        while( $meta{ video }=~ /L<(?:([^>|]*)\|?)([^>]+)>/g ) {
+            my $title= "$1 video" || 'video';
+            my $link= $2;
+            my $embed;
+            if( $link =~ m!/watch\?v=(.*)! ) {
+                $embed= $1;
+            };
+            push @videos, {
+                title => $title,
+                link => $link,
+                embed => $embed,
+            };
+        };
+        $meta{ video }= \@videos;
     };
     \%meta
 };
@@ -102,8 +138,11 @@ for (@talks) {
              ? pod_metadata( $_ )
              : slides_metadata( $_ )
 	     ;
-    next unless $info->{title};
-    print Dumper $info;
+    if( ! $info->{title} ) {
+        warn "$_ has no title\n" if $verbose;
+        next
+    };
+    #print Dumper $info;
     my $s = $info->{tags};
     if ($s) {
         for my $section (@$s) {
@@ -115,8 +154,9 @@ for (@talks) {
     };
 };
 
-my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} } sort keys %sections;
-warn Dumper \@sections;
+my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} }
+               grep { exists $sections{ $_ }} @section_order;
+#warn Dumper \@sections;
 
 sub html {
     my ($params) = @_;
@@ -176,7 +216,8 @@ sub upload_files {
         );
         
         system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
-        system('rsync', '-arR', @files, "$host:$target_dir/$talk->{talkdir}");
+        system('rsync', '-arR', @files, "$host:$target_dir/$talk->{talkdir}") == 0
+           or die "rsync error: $?/$!";
         chdir( $old_dir )
             or die "Couldn't restore '$old_dir': $!";
     };
@@ -210,12 +251,24 @@ __DATA__
 <body>
 <h1>Vortraege von Max Maischein</h1>
 <p>Die meisten der folgenden Vortr&auml;ge habe ich auf den
-<a href="http://www.perlworkshop.de/">Deutschen Perl Workshop</a>s gehalten.</p>
+<a href="http://www.perlworkshop.de/">Deutschen Perl Workshop</a>s
+oder <a href="http://yapc.eu/">YAPC::Europe</a> gehalten.</p>
 [% FOR s IN sections %]
 <h2>[% s.name %]</h2>
 <ul>
-[% FOR i IN s.items %]<li><a href="[% i.talkdir %]/[% i.htmlname %]">[% i.title %]</a>[%
- IF i.htmlname_en; THEN %] (<a href="[% i.talkdir %]/[% i.htmlname_en %]">English</a>)[% END %]</li>[% END %]
+[% FOR i IN s.items %]<li><a href="[% i.talkdir %]/[% i.htmlname %]">[% i.title %]</a>
+[% IF i.htmlname_en; THEN %] (<a href="[% i.talkdir %]/[% i.htmlname_en %]">English</a>)[% END %]
+[% IF i.video; THEN %] ([% FOR v IN i.video %]<a href="[% v.link %]">[% v.title %]</a>[% END %])
+[% FOR v IN i.video %]
+[% IF v.embed; THEN %]
+<!--
+<iframe id="ytplayer" type="text/html" width="640" height="390"
+  src="http://www.youtube.com/embed/[% v.embed %]"
+  frameborder="0"></iframe>
+-->
+[% END %]
+[% END %][% END %]
+</li>[% END %]
 </ul>
 [% END %]
 <p><a href="/">Zur&uuml;ck zur Startseite</a></p>

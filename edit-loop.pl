@@ -17,6 +17,7 @@ sub status($) {
 };
 
 my ($file,@cmd) = @ARGV;
+
 push @files, $file;
 @files = map { bsd_glob $_ } @files;
 $file= $files[0];
@@ -25,6 +26,9 @@ if(0 == @cmd and -f 'Makefile') {
     @cmd = 'dmake';
 };
 
+if( ! -f $file ) {
+    ($file)= bsd_glob( $file );
+};
 my $watch = Win32::FileNotify->new($file);
 my $mech = WWW::Mechanize::Firefox->new();
 
