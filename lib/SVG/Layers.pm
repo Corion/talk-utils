@@ -62,6 +62,9 @@ sub layers {
     my ($self,$doc) = @_;
     $doc ||= $self->svg->documentElement;
     my @l = $self->find('/svg:svg/svg:g[@inkscape:groupmode="layer"]',$doc);
+    if( ! @l ) {
+        @l = $self->find('/svg or /svg:svg',$doc);
+    };
     my %label;
     for (@l) {
         ($label{ $_ }) = map { $_->value } $self->find('@inkscape:label',$_);
