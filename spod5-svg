@@ -138,7 +138,7 @@ use Getopt::Long;
 use Template;
 use File::Spec;
 use File::Basename;
-use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
+#use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
 use FindBin;
 use lib "$FindBin::Bin/lib";
 use SVG::Layers;
@@ -208,7 +208,7 @@ use vars '@shortcuts';
     sub { s/^\-\s*$/\n=back\n\n/gm },
     sub { s/\A\s*//;    # Pod::POM does not likes newlines at the beginning
     },
-    sub { s!^{{(.*?)^}}!=for html <div class="handout">\n\n$1\n=for html </div>\n\n!gms },
+    sub { s!^\{\{(.*?)^}}!=for html <div class="handout">\n\n$1\n=for html </div>\n\n!gms },
     sub { s{^=svg\s+(\S+)}{svg_to_pod($1)}egm },
     sub { s!^=img\s+(\S+)!=for html <img src="$1" />\n\n!gm },
     sub { s{^=include\s+(\S+)}{include($_[0], $1)}egm },
@@ -246,8 +246,12 @@ for my $file (@files) {
       && ( stat $new )[9] > ( stat $file )[9]
       && !$conf{quiet}
       && print STDERR "skipped (use --force)\n";
+    binmode STDIN, ':encoding(UTF-8)';
 
-    my $text = join '', <>;
+    #my $text = join '', <>;
+    open my $fh, '<:encoding(UTF-8)', $file
+        or die "Couldn't read '$file': $!";
+    my $text = join '', <$fh>;
     next unless $text;
 
     # convert text shortcuts back to pod
