@@ -4,6 +4,7 @@ use Win32::FileNotify;
 #use HTML::Display::MozRepl;
 use WWW::Mechanize::Firefox;
 use File::Glob qw(bsd_glob);
+use File::Spec;
 
 use Getopt::Long;
 GetOptions(
@@ -47,12 +48,21 @@ while (1) {
     system(@cmd);
 
     # Remember what slide of the slideshow was shown
-    my ($page,$type) = $mech->eval_in_page('snum');
+    my ($loc,$type) = $mech->eval_in_page('window.location.toString()');
+    warn "<<$loc>>";
+    if( $loc !~ /#slide(\d+)/ ) {
+        my ($page,$type) = eval { $mech->eval_in_page('snum') };
 
-    status "Reloading $html";
-    $mech->get_local($html, basedir => '.');
-    
-    $page ||= '0';
-    status "Showing slide $page";
-    $mech->eval_in_page("go($page);");
+        status "Reloading $html";
+        $mech->get_local($html, basedir => '.');
+
+        $page ||= '0';
+        status "Showing slide $page";
+        $mech->eval_in_page("go($page);");
+    } else {
+        # We have a location we can jump to:
+        status "Reloading $loc";
+        $mech->get('about:blank');
+        $mech->get($loc);
+    }
 };
