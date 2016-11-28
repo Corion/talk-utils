@@ -39,7 +39,7 @@ if( -f $html ) {
     $mech->get_local($html, basedir => '.');
 };
 
-status "Watchcing $file";
+status "Watching $file";
 while (1) {
     if( -f $html ) {
         $watch->wait;
