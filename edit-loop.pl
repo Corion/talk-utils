@@ -49,7 +49,7 @@ while (1) {
 
     # Remember what slide of the slideshow was shown
     my ($loc,$type) = $mech->eval_in_page('window.location.toString()');
-    warn "<<$loc>>";
+    #warn "<<$loc>>";
     if( $loc !~ /#slide(\d+)/ ) {
         my ($page,$type) = eval { $mech->eval_in_page('snum') };
 
@@ -62,7 +62,8 @@ while (1) {
     } else {
         # We have a location we can jump to:
         status "Reloading $loc";
-        $mech->get('about:blank');
-        $mech->get($loc);
+        #$mech->get('about:blank');
+        $mech->reload();
+        #$mech->get($loc);
     }
 };
