@@ -35,6 +35,8 @@ my $mech = WWW::Mechanize::Firefox->new();
 
 (my $html = $file) =~ s/\.pod$/\.html/i;
 
+status "Rebuilding";
+system(@cmd);
 if( -f $html ) {
     status "Loading $html";
     $mech->get_local($html, basedir => '.');
