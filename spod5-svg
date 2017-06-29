@@ -111,7 +111,7 @@ sub view_verbatim {
 
         # Unwrap the PRE tags
         $res =~ s/^<pre>//;
-        $res =~ s!</pre>$!!;
+        $res =~ s!</pre>\s*$!!;
         # highlight/lowlight
         #warn "[[$res]]";
         # Mark single lines
