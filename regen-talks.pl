@@ -129,9 +129,27 @@ sub pod_metadata {
     };
     if( $meta{ presdate }) {
         # reconstruct a sane date
+        my $old = $meta{ presdate };
+        $meta{ presdate } =~ s!M.+rz!Maerz!g;
+        $meta{ presdate } =~ s!M&auml;rz!Maerz!g;
+        $meta{ presdate } =~ s!Maerz!March!;
+        $meta{ presdate } =~ s!\bFebruar\b!February!;
+        $meta{ presdate } =~ s!\bMai\b!May!;
+        $meta{ presdate } =~ s!\bJuni\b!June!;
+        $meta{ presdate } =~ s!\bOktober\b!October!;
+        $meta{ presdate } =~ s!\bDezember\b!December!;
         $meta{ presdate } =~ s![. ]!!g;
-        $meta{ presdate } = Time::Piece->new->strptime('%d%B%Y')->ymd;
-        $meta{ presdate } .= '+00:00Z';
+        $meta{ presdate } =~ s!^0!!;
+        eval {
+            $meta{ presdate } = Time::Piece->new->strptime($meta{presdate}, '%d%B%Y')->ymd;
+            $meta{ presdate } .= '+00:00Z';
+        };
+        if( $@ ) {
+            warn "$meta{presdate}: $@";
+            $meta{ presdate } = $old;
+        } else {
+            #warn "OK: $old => $meta{presdate}";
+        }
     };
     \%meta
 };
@@ -225,8 +243,11 @@ my $atom = atom({ sections => \@sections, base => 'http://corion.net/talks', });
 my $ssh;
 sub ssh {
     my $host = shift;
-    $ssh ||= Net::SSH2->new()->connect( $host );
-    my $ch = ssh->channel();#system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
+    if( ! $ssh ) {
+        $ssh = Net::SSH2->new();
+        $ssh->connect( $host );
+    };
+    my $ch = $ssh->channel();#system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
     $ch->exec( @_ );
 }
 
