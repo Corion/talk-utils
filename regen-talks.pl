@@ -9,7 +9,6 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Glob qw(bsd_glob);
 use XML::Atom::SimpleFeed;
-use Time::Piece;
 use Net::SSH2; # well, we could also shell out, but that's slower
 
 GetOptions(
@@ -76,9 +75,9 @@ chdir( dirname $0 )
     or die sprintf "Couldn't chdir to '%s': $!", dirname($0);
 my @talks = grep { -f
                 && (   m!/[^-]+.(pod|slides)$!
-            || m!-talk\.(pod|slides)$!
-            || m!/(.*)/\1.(pod|slides)$!
-            || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
+		    || m!-talk\.(pod|slides)$!
+		    || m!/(.*)/\1.(pod|slides)$!
+		    || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
 
 # Reject todo.pod
 @talks = grep { lc($_) !~ /\btodo.pod$/ } @talks;
@@ -127,12 +126,6 @@ sub pod_metadata {
         };
         $meta{ video }= \@videos;
     };
-    if( $meta{ presdate }) {
-        # reconstruct a sane date
-        $meta{ presdate } =~ s![. ]!!g;
-        $meta{ presdate } = Time::Piece->new->strptime('%d%B%Y')->ymd;
-        $meta{ presdate } .= '+00:00Z';
-    };
     \%meta
 };
 
@@ -148,7 +141,7 @@ sub slides_metadata {
         podname => basename($talk),
         htmlname => $htmlname,
         talkdir => $talkdir,
-    map { s/\s+$//; /^(\w+):\s+(.*)$/ ? ($1 => $2) : () } <$fh>
+	map { s/\s+$//; /^(\w+):\s+(.*)$/ ? ($1 => $2) : () } <$fh>
     );
     if ($meta{tags}) {
         $meta{tags} = [ split /[, ]+/, $meta{tags} ];
@@ -161,7 +154,7 @@ for (@talks) {
     my $info = /\.pod/
              ? pod_metadata( $_ )
              : slides_metadata( $_ )
-         ;
+	     ;
     if( ! $info->{title} ) {
         warn "$_ has no title\n" if $verbose;
         next
@@ -202,7 +195,7 @@ sub atom {
     );
     # flatten the sections into one long list
     for my $talk (map { @{ $_->{items} } } @{ $params->{sections} }) {
-        $talk->{date} ||= $talk->{presdate} || strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
+        $talk->{date} ||= strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
         $feed->add_entry(
             title => $talk->{title},
             (link  => join '/', $base_url, $talk->{talkdir},$talk->{htmlname},),
@@ -222,14 +215,6 @@ if ($local_only) {
 };
 my $atom = atom({ sections => \@sections, base => 'http://corion.net/talks', });
 
-my $ssh;
-sub ssh {
-    my $host = shift;
-    $ssh ||= Net::SSH2->new()->connect( $host );
-    my $ch = ssh->channel();#system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
-    $ch->exec( @_ );
-}
-
 sub upload_files {
     my ($host,$target_dir) = @_;
     for my $talk (map {@$_} values %sections) {
@@ -240,22 +225,21 @@ sub upload_files {
                     grep { defined and -e($_) } (
             'images',
             'diagrams',
-            'ui',
-            'ui/default',
-            'ui/i18n',
-            $talk->{htmlname},
-            $talk->{htmlname_en},
-            $talk->{podname},
+	    'ui',
+	    'ui/default',
+	    'ui/i18n',
+	    $talk->{htmlname},
+	    $talk->{htmlname_en},
+	    $talk->{podname},
         );
         
-        #system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
-        ssh( $host, sprintf qq{mkdir "$target_dir/%s"}, quotemeta $talk->{talkdir});
+        system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
         system('rsync', '-arR', @files, "$host:$target_dir/$talk->{talkdir}") == 0
            or die "rsync error: $?/$!";
         chdir( $old_dir )
             or die "Couldn't restore '$old_dir': $!";
     };
-    ssh( $host, "chmod","-R", "ugo+rx", "$target_dir/");
+    system('ssh', $host, "chmod","-R", "ugo+rx", "$target_dir/");
 };
 
 upload_files('datenzoo.de',$target_dir);
