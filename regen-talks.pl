@@ -9,6 +9,7 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Glob qw(bsd_glob);
 use XML::Atom::SimpleFeed;
+use Net::SSH2;
 
 GetOptions(
     'target|t:s' => \my $target_dir,
@@ -198,6 +199,14 @@ if ($local_only) {
 };
 my $atom = atom({ sections => \@sections, base => 'http://corion.net/talks', });
 
+my $ssh;
+sub ssh {
+    my $host = shift;
+    $ssh ||= Net::SSH2->new()->connect( $host );
+    my $ch = ssh->channel();#system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
+    $ch->exec( @_ );
+}
+
 sub upload_files {
     my ($host,$target_dir) = @_;
     for my $talk (map {@$_} values %sections) {
@@ -207,21 +216,22 @@ sub upload_files {
         my @files = map  { -d($_) ? bsd_glob "$_/*" : $_ }
                     grep { defined and -e($_) } (
             'images',
-	    'ui',
-	    'ui/default',
-	    'ui/i18n',
-	    $talk->{htmlname},
-	    $talk->{htmlname_en},
-	    $talk->{podname},
+            'ui',
+            'ui/default',
+            'ui/i18n',
+            $talk->{htmlname},
+            $talk->{htmlname_en},
+            $talk->{podname},
         );
         
-        system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
+        #system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
+        ssh( $host, sprintf qq{mkdir "$target_dir/%s"}, quotemeta $talk->{talkdir});
         system('rsync', '-arR', @files, "$host:$target_dir/$talk->{talkdir}") == 0
            or die "rsync error: $?/$!";
         chdir( $old_dir )
             or die "Couldn't restore '$old_dir': $!";
     };
-    system('ssh', $host, "chmod","-R", "ugo+rx", "$target_dir/");
+    ssh( $host, "chmod","-R", "ugo+rx", "$target_dir/");
 };
 
 upload_files('datenzoo.de',$target_dir);
