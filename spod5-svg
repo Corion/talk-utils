@@ -99,33 +99,9 @@ sub view_item {
 
 sub view_verbatim {
     my ($self,$text) = @_;
-
     my $line = 1;
     $text =~ s!^!sprintf "%2g:", $line++!egm;
-    my $res= $self->SUPER::view_verbatim($text);
-
-    if( $res  =~ /^((?:<pre>)?[ \d]?\d:)  [+!] /m ) {
-        my %class=(' ' => 'lowlight',
-                   '!' => 'highlight',
-                   '+' => '',
-                  );
-
-        # Unwrap the PRE tags
-        $res =~ s/^<pre>//;
-        $res =~ s!</pre>\s*$!!;
-        # highlight/lowlight
-        #warn "[[$res]]";
-        # Mark single lines
-                       #  1:  !
-        $res =~ s[^([\d ]\d:)  ([ !+])(.*)][qq($1<span class="$class{$2}"> $3</span $class{$2}>)]egm;
-        # Merge adjoining commonly tagged lines
-        $res =~ s[</span (\w*)>\s+<span class="\1">][\n]gms;
-        # Clean up our HTML again
-        $res =~ s[</span (\w*)>][</span>]g;
-        # Wrap in PRE again
-        $res = "<pre>$res</pre>";
-    };
-    $res
+    $self->SUPER::view_verbatim($text)
 }
 
 #
@@ -139,9 +115,7 @@ use Getopt::Long;
 use Template;
 use File::Spec;
 use File::Basename;
-#use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
-use FindBin;
-use lib "$FindBin::Bin/lib";
+use lib 'c:/Dokumente und Einstellungen/Corion/Desktop/Talks/lib';
 use SVG::Layers;
 
 our $VERSION = '0.02';
@@ -209,7 +183,7 @@ use vars '@shortcuts';
     sub { s/^\-\s*$/\n=back\n\n/gm },
     sub { s/\A\s*//;    # Pod::POM does not likes newlines at the beginning
     },
-    sub { s!^\{\{(.*?)^}}!=for html <div class="handout">\n\n$1\n=for html </div>\n\n!gms },
+    sub { s!^{{(.*?)^}}!=for html <div class="handout">\n\n$1\n=for html </div>\n\n!gms },
     sub { s{^=svg\s+(\S+)}{svg_to_pod($1)}egm },
     sub { s!^=img\s+(\S+)!=for html <img src="$1" />\n\n!gm },
     sub { s{^=include\s+(\S+)}{include($_[0], $1)}egm },
@@ -247,12 +221,8 @@ for my $file (@files) {
       && ( stat $new )[9] > ( stat $file )[9]
       && !$conf{quiet}
       && print STDERR "skipped (use --force)\n";
-    binmode STDIN, ':encoding(UTF-8)';
 
-    #my $text = join '', <>;
-    open my $fh, '<:encoding(UTF-8)', $file
-        or die "Couldn't read '$file': $!";
-    my $text = join '', <$fh>;
+    my $text = join '', <>;
     next unless $text;
 
     # convert text shortcuts back to pod
@@ -465,7 +435,6 @@ __DATA__
 <html xmlns="http://www.w3.org/1999/xhtml">
 
 <head>
-<meta name="charset" content="UTF-8" />
 <title>[% meta.title %]</title>
 <!-- metadata -->
 <meta name="generator" content="spod5" />

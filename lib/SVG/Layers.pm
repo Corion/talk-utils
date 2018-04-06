@@ -10,7 +10,7 @@ sub get_layers {
 
     for my $slide ($s->animation_from_layers) {
         (my $outname = $file) =~ s/\.svg$//gi;
-        $outname .= sprintf "-%02d.svg", $counter++;
+        $outname .= sprintf "-%s.svg", $counter++;
         $slide->save($outname);
         push @result, $outname;
     }
@@ -62,9 +62,6 @@ sub layers {
     my ($self,$doc) = @_;
     $doc ||= $self->svg->documentElement;
     my @l = $self->find('/svg:svg/svg:g[@inkscape:groupmode="layer"]',$doc);
-    if( ! @l ) {
-        @l = $self->find('/svg or /svg:svg',$doc);
-    };
     my %label;
     for (@l) {
         ($label{ $_ }) = map { $_->value } $self->find('@inkscape:label',$_);

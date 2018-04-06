@@ -10,7 +10,7 @@ use Getopt::Long;
 use File::Glob qw(bsd_glob);
 use XML::Atom::SimpleFeed;
 use Time::Piece;
-use Net::SSH2;
+use Net::SSH2; # well, we could also shell out, but that's slower
 
 GetOptions(
     'target|t:s' => \my $target_dir,
@@ -52,9 +52,25 @@ my @tags = (
     gpw2013 => '15. Deutscher Perl Workshop, Berlin (2013)',
     dpw2013 => '15. Deutscher Perl Workshop, Berlin (2013)',
     yapce2013 => 'YAPC::Europe 2013 (Kiew / Kyiv)',
+    gpw2014 => '16. Deutscher Perl Workshop, Hannover (2014)',
+    dpw2014 => '16. Deutscher Perl Workshop, Hannover (2014)',
+    yapce2014 => 'YAPC::Europe 2014 (Sofia)',
+    apw2014 => '&Ouml;sterreichischer Perl Workshop, Salzburg (2014)',
+    gpw2015 => '17. Deutscher Perl Workshop, Dresden (2015)',
+    dpw2015 => '17. Deutscher Perl Workshop, Dresden (2015)',
+    yapce2015 => 'YAPC::Europe 2015 (Granada)',
+    gpw2016 => '18. Deutscher Perl Workshop, N&uuml;rnberg (2016)',
+    dpw2016 => '18. Deutscher Perl Workshop, N&uuml;rnberg (2016)',
+    yapce2016 => 'YAPC::Europe 2016 (Cluj)',
+    lpw2016 => 'London Perl Workshop 2016',
+    dpw2017 => '19. Deutscher Perl Workshop, Hamburg (2017)',
+    gpw2017 => '19. Deutscher Perl Workshop, Hamburg (2017)',
+    yapce2017 => 'YAPC::Europe 2017 (Amsterdam)',
+    lpw2017 => 'London Perl Workshop 2017',
+    gpw2018 => '20. Deutscher Perl Workshop, Köln (2018)',
 );
-my %tags = map {$tags[$_*2] => $tags[$_*2+1]} 0..(@tags / 2);
-my @section_order = map {$tags[ $_*2 ]} 0..(@tags/2);
+my %tags = map {$tags[$_*2] => $tags[$_*2+1]} 0..($#tags / 2);
+my @section_order = map {$tags[ $_*2 ]} 0..($#tags/2);
 
 chdir( dirname $0 )
     or die sprintf "Couldn't chdir to '%s': $!", dirname($0);
@@ -85,14 +101,14 @@ sub pod_metadata {
         podname => basename($talk),
         htmlname => $htmlname,
         talkdir => $talkdir,
-    map { s/\s+$//; /^=meta (\w+)\s+(.*)$/ ? ($1 => $2) : () } <$fh>
+	map { s/\s+$//; /^=meta\s+(\w+)\s+(.*)$/ ? ($1 => $2) : () } <$fh>
     );
     (my $en_name = $htmlname) =~ s/(?:.de)?\.html$/.en.html/i;
     if (-e "../$talkdir/$en_name") {
         $meta{htmlname_en} = $en_name;
     };
     if ($meta{tags}) {
-        $meta{tags} = [ split /,/, $meta{tags} ];
+        $meta{tags} = [ split /[, ]+/, $meta{tags} ];
     };
     if( $meta{video} ) {
         my @videos;
@@ -135,7 +151,7 @@ sub slides_metadata {
     map { s/\s+$//; /^(\w+):\s+(.*)$/ ? ($1 => $2) : () } <$fh>
     );
     if ($meta{tags}) {
-        $meta{tags} = [ split /,/, $meta{tags} ];
+        $meta{tags} = [ split /[, ]+/, $meta{tags} ];
     };
     \%meta
 };
@@ -164,7 +180,7 @@ for (@talks) {
 
 my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} }
                grep { exists $sections{ $_ }} @section_order;
-#warn Dumper \@sections;
+warn Dumper \%sections;
 
 sub html {
     my ($params) = @_;
@@ -223,6 +239,7 @@ sub upload_files {
         my @files = map  { -d($_) ? bsd_glob "$_/*" : $_ }
                     grep { defined and -e($_) } (
             'images',
+            'diagrams',
             'ui',
             'ui/default',
             'ui/i18n',
@@ -278,14 +295,16 @@ oder <a href="http://yapc.eu/">YAPC::Europe</a> gehalten.</p>
 [% IF i.video; THEN %] ([% FOR v IN i.video %]<a href="[% v.link %]">[% v.title %]</a>[% END %])
 [% FOR v IN i.video %]
 [% IF v.embed; THEN %]
-<!--
+    [% IF NOT embedded; THEN %]
+    [% SET embedded=1 %]
 <iframe id="ytplayer" type="text/html" width="640" height="390"
   src="http://www.youtube.com/embed/[% v.embed %]"
-  frameborder="0"></iframe>
--->
+  frameborder="0" allowfullscreen></iframe>
+    [% END %]
 [% END %]
-[% END %][% END %]
-</li>[% END %]
+[% END %]
+[% END %]
+</li>[% SET embedded=0 %][% END %]
 </ul>
 [% END %]
 <p><a href="/">Zur&uuml;ck zur Startseite</a></p>
