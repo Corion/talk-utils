@@ -9,6 +9,7 @@ use Data::Dumper;
 use Getopt::Long;
 use File::Glob qw(bsd_glob);
 use XML::Atom::SimpleFeed;
+use Time::Piece;
 use Net::SSH2;
 
 GetOptions(
@@ -59,9 +60,9 @@ chdir( dirname $0 )
     or die sprintf "Couldn't chdir to '%s': $!", dirname($0);
 my @talks = grep { -f
                 && (   m!/[^-]+.(pod|slides)$!
-		    || m!-talk\.(pod|slides)$!
-		    || m!/(.*)/\1.(pod|slides)$!
-		    || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
+            || m!-talk\.(pod|slides)$!
+            || m!/(.*)/\1.(pod|slides)$!
+            || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
 
 # Reject todo.pod
 @talks = grep { lc($_) !~ /\btodo.pod$/ } @talks;
@@ -84,7 +85,7 @@ sub pod_metadata {
         podname => basename($talk),
         htmlname => $htmlname,
         talkdir => $talkdir,
-	map { s/\s+$//; /^=meta (\w+)\s+(.*)$/ ? ($1 => $2) : () } <$fh>
+    map { s/\s+$//; /^=meta (\w+)\s+(.*)$/ ? ($1 => $2) : () } <$fh>
     );
     (my $en_name = $htmlname) =~ s/(?:.de)?\.html$/.en.html/i;
     if (-e "../$talkdir/$en_name") {
@@ -110,6 +111,12 @@ sub pod_metadata {
         };
         $meta{ video }= \@videos;
     };
+    if( $meta{ presdate }) {
+        # reconstruct a sane date
+        $meta{ presdate } =~ s![. ]!!g;
+        $meta{ presdate } = Time::Piece->new->strptime('%d%B%Y')->ymd;
+        $meta{ presdate } .= '+00:00Z';
+    };
     \%meta
 };
 
@@ -125,7 +132,7 @@ sub slides_metadata {
         podname => basename($talk),
         htmlname => $htmlname,
         talkdir => $talkdir,
-	map { s/\s+$//; /^(\w+):\s+(.*)$/ ? ($1 => $2) : () } <$fh>
+    map { s/\s+$//; /^(\w+):\s+(.*)$/ ? ($1 => $2) : () } <$fh>
     );
     if ($meta{tags}) {
         $meta{tags} = [ split /,/, $meta{tags} ];
@@ -138,7 +145,7 @@ for (@talks) {
     my $info = /\.pod/
              ? pod_metadata( $_ )
              : slides_metadata( $_ )
-	     ;
+         ;
     if( ! $info->{title} ) {
         warn "$_ has no title\n" if $verbose;
         next
@@ -179,7 +186,7 @@ sub atom {
     );
     # flatten the sections into one long list
     for my $talk (map { @{ $_->{items} } } @{ $params->{sections} }) {
-        $talk->{date} ||= strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
+        $talk->{date} ||= $talk->{presdate} || strftime( '%Y-%m-%dT%H:%M:%SZ', gmtime );
         $feed->add_entry(
             title => $talk->{title},
             (link  => join '/', $base_url, $talk->{talkdir},$talk->{htmlname},),
