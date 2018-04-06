@@ -173,7 +173,7 @@ for (@talks) {
 
 my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} }
                grep { exists $sections{ $_ }} @section_order;
-warn Dumper \%sections;
+#warn Dumper \%sections;
 
 sub html {
     my ($params) = @_;
