@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use Path::Class;
 
 #
 # the view that turns pod into S5
@@ -217,12 +218,12 @@ use vars '@shortcuts';
 
 sub svg_to_pod {
     my ($svgfile) = @_;
+    #my $svg = file( $svgfile )->slurp(iomode => '<:encoding(UTF-8)');
+    #$svg =~ s!<\?xml[^>]+>\s+!!;
+    #$svg =~ s!(\r?\n)+! !g;
+    #return qq(=for html\n<object type="image/svg+xml">$svg</object>);
     
-    my $svg = SVG::File->load($svgfile);
-    #my ($width,$height) = map { int $_ + 5 } $svg->dimensions;
-    (my $pngfile = $svgfile) =~ s/\.svg/\.png/i;
-    
-    return "=img $pngfile\n"
+    return qq(=for html\n  <object data="$svgfile" type="image/svg+xml"></object>);
 }
 
 sub convert_shortcuts {
