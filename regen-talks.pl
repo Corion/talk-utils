@@ -68,6 +68,7 @@ my @tags = (
     yapce2017 => 'YAPC::Europe 2017 (Amsterdam)',
     lpw2017 => 'London Perl Workshop 2017',
     gpw2018 => '20. Deutscher Perl Workshop, Köln (2018)',
+    tpc2018 => 'The Perl Conference in Glasgow (2018)',
 );
 my %tags = map {$tags[$_*2] => $tags[$_*2+1]} 0..($#tags / 2);
 my @section_order = map {$tags[ $_*2 ]} 0..($#tags/2);
