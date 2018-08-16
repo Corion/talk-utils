@@ -245,10 +245,14 @@ my $ssh;
 sub ssh {
     my $host = shift;
     if( ! $ssh ) {
+        #$ssh = Net::SSH2->new(debug => 1);
         $ssh = Net::SSH2->new();
-        $ssh->connect( $host );
+#warn "Connecting to $host";
+        $ssh->connect( $host ) or $ssh->die_with_error;
+        $ssh->auth_agent('corion');
     };
-    my $ch = $ssh->channel();#system('ssh', $host, "mkdir","$target_dir/$talk->{talkdir}");
+    my $ch = $ssh->channel();
+#warn "@_";
     $ch->exec( @_ );
 }
 
