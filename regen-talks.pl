@@ -270,7 +270,7 @@ if ($local_only) {
     print $index;
     exit;
 };
-my $atom = atom({ sections => \@sections, base => 'http://corion.net/talks', });
+my $atom = atom({ sections => \@sections, base => 'https://corion.net/talks', });
 
 my $ssh;
 sub ssh {
