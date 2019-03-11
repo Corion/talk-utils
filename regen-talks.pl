@@ -11,6 +11,7 @@ use File::Glob qw(bsd_glob);
 use XML::Atom::SimpleFeed;
 use Time::Piece;
 use Net::SSH2; # well, we could also shell out, but that's slower
+use OpenOffice::OODoc::Meta;
 
 GetOptions(
     'target|t:s' => \my $target_dir,
