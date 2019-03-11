@@ -68,8 +68,10 @@ my @tags = (
     gpw2017 => '19. Deutscher Perl Workshop, Hamburg (2017)',
     yapce2017 => 'YAPC::Europe 2017 (Amsterdam)',
     lpw2017 => 'London Perl Workshop 2017',
-    gpw2018 => '20. Deutscher Perl Workshop, Köln (2018)',
+    gpw2018 => '20. Deutscher Perl Workshop, K&ouml;ln (2018)',
     tpc2018 => 'The Perl Conference in Glasgow (2018)',
+    gpw2019 => '21. Deutscher Perl Workshop, M&uuml;nchen (2019)',
+    dpw2019 => '21. Deutscher Perl Workshop, M&uuml;nchen (2019)',
 );
 my %tags = map {$tags[$_*2] => $tags[$_*2+1]} 0..($#tags / 2);
 my @section_order = map {$tags[ $_*2 ]} 0..($#tags/2);
@@ -78,9 +80,12 @@ chdir( dirname $0 )
     or die sprintf "Couldn't chdir to '%s': $!", dirname($0);
 my @talks = grep { -f
                 && (   m!/[^-]+.(pod|slides)$!
-            || m!-talk\.(pod|slides)$!
-            || m!/(.*)/\1.(pod|slides)$!
-            || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))) } glob '../*/*.pod ../*/*.slides';
+                    || m!-talk\.(pod|slides)$!
+                    || m!/(.*)/\1.(pod|slides)$!
+                    || m!/(.*)/LT-\1.(md)$!i
+                    || (m!/(.*)/(.*?)(?:.en|.de)?.(pod|slides)$! && (lc basename($1) eq $2 ))
+                    || m!/(.*)/(.*)\.(odp)$!i ) }
+            glob '../*/*.pod ../*/*.slides ../*/*.md ../*/*.odp';
 
 # Reject todo.pod
 @talks = grep { lc($_) !~ /\btodo.pod$/ } @talks;
@@ -96,7 +101,11 @@ sub pod_metadata {
     open my $fh, '<', $talk
         or die "Couldn't open '$talk': $!";
     my $htmlname = lc basename $talk;
-    $htmlname =~ s/\.pod/\.html/;
+    if( $talk =~ /\.md$/ ) {
+        $htmlname = 'index.html';
+    } else {
+        $htmlname =~ s/\.pod/\.html/;
+    }
     my $talkdir = dirname $talk;
     $talkdir =~ s!^..[\\/]!!;
     my %meta = (
@@ -156,6 +165,27 @@ sub pod_metadata {
     \%meta
 };
 
+sub markdown_metadata {
+}
+
+sub ooo_metadata {
+    my( $talk) = @_;
+    my $doc = OpenOffice::OODoc::Meta->new(file => $talk);
+    my $talkdir = dirname $talk;
+    $talkdir =~ s!^..[\\/]!!;
+    warn $_ for $doc->keywords;
+    my %meta = (
+        podname => basename($talk),
+        htmlname => basename($talk),
+        htmlname_en => basename($talk),
+        talkdir  => $talkdir,
+        title    => $doc->title,
+        #presdate => $doc->title,
+        tags     => [ $doc->keywords ],
+    );
+    \%meta
+}
+
 sub slides_metadata {
     my ($talk) = @_;
     open my $fh, '<', $talk
@@ -178,9 +208,9 @@ sub slides_metadata {
 
 my %sections;
 for (@talks) {
-    my $info = /\.pod/
-             ? pod_metadata( $_ )
-             : slides_metadata( $_ )
+    my $info = /\.pod$/ ? pod_metadata( $_ ) 
+             : /\.odp$/ ? ooo_metadata( $_ )
+             :            slides_metadata( $_ )
          ;
     if( ! $info->{title} ) {
         warn "$_ has no title\n" if $verbose;
@@ -190,6 +220,7 @@ for (@talks) {
     my $s = $info->{tags};
     if ($s) {
         for my $section (@$s) {
+warn "[[$section]]";
             $sections{ $section } ||= [];
             push @{$sections{ $section }}, $info;
         };
@@ -199,8 +230,7 @@ for (@talks) {
 };
 
 my @sections = map { { items => $sections{$_}, tag => $_, name => $tags{$_}} }
-               grep { exists $sections{ $_ }} @section_order;
-#warn Dumper \%sections;
+               grep { warn $_ unless exists $sections{$_}; exists $sections{ $_ }} @section_order;
 
 sub html {
     my ($params) = @_;
